@@ -1,0 +1,13 @@
+key,value
+root,D:\Github\Swedish_Grid_Builder
+output_code,2024_Jun01
+time_out_minutes,2880
+cost_fixed_mi,1
+miles_above_norm_mult,10
+const_fixed_cost,20
+cost_ehv_water_mult,30
+cost_ehv_interarea_mult,2
+cost_ehv_interkv_mult,2
+tp_start,cold
+cost_bridge_mw,10
+cost_overload_mw,0.2
