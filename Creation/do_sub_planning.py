@@ -20,7 +20,7 @@ from sgb_suite.sub_planning import GenFragment, GenUnit
 tlap = time()
 def lap(txt): global tlap; print(txt + f" | {time()-tlap} secs"); tlap=time()
 
-def do_sub_planning_70k():
+def do_sub_planning():
 
     sgb = SyntheticGridBuilder("texas_config.txt")
 
@@ -47,7 +47,7 @@ def do_sub_planning_70k():
         coasts.append(db_coasts.iloc[i]["geometry"])
 
     # Read KML File
-    ei_boundary = []
+    ei_boundary = [] #TODO: Get shapefiile from Brian and add it here- change EI to ERCOT
     with open(rf"{sgb.input_folder}\EI_Boundary.kml") as f:
         while f.readline().strip() != "<coordinates>": continue
         while True:
@@ -60,7 +60,7 @@ def do_sub_planning_70k():
 
     lap("Files loaded in")
 
-    # TODO: Change these to weather zones or load zones - check with Dr. B
+    # TODO: Change these to weather zones or load zones - check with Dr. B - weather zone may be better!
     state_map = {"AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas", 
                 "CA": "California", "CO": "Colorado", "CT": "Connecticut", 
                 "DE": "Delaware", "DC": "District of Columbia", "FL": "Florida", 
@@ -181,7 +181,7 @@ def do_sub_planning_70k():
     sgb.assign_gen_cost()
 
     # Correct areas from just the states
-    #TODO: Change these to Texas areas
+    #TODO: Change these to Texas areas?? -do we need to break weather zones into smaller? - county? group them?
     area_split = {
         "Ontario": ["Lat", 44.2],
         "New York": ["Lat", 41.3, 43.5],
@@ -255,6 +255,8 @@ def do_sub_planning_70k():
 
     # Clustering into substations
     sgb.cluster_load_frags(18000) #TODO: what should the cluster load frags number be? - check with Dr. B
+    #TODO: 50% of the bus suzes? stick to the 2.3 or 2.5 buses per substation - check with Dr. B?
+    # do statistics with ERCOT?
     sgb.create_subs_old()
 
     # Post-processing
@@ -269,7 +271,7 @@ def do_sub_planning_70k():
 
     nc = 400 #TODO: what should the nc number be? - check with Dr. B
 
-    class EHV_Cluster:
+    class EHV_Cluster: #TODO: Would we add 765 here or just upto 345? - check with Dr. B
         def __init__(self):
             self.subs = []
 
@@ -303,7 +305,8 @@ def do_sub_planning_70k():
             s.is_ehv = True
 
     # Specific area specifications - kv levels, regions, region load factor
-    # TODO: Update based on Texas areas - check with Dr. B
+    # TODO: Update based on Texas areas/zones - check with Dr. B
+    # TODO: Do not replicate 765kV - but similar to that constraint. - Brian
     kv_areas = {"Indiana":(138,765), "Ohio 1":(138,765), "West Virginia":(138,765), "New Jersey 1":(161,500), "Alabama 1":(161,500), "Alabama 2":(161,500), "Arkansas":(161,500), "Far East Texas":(161,500), "Florida 1":(161,500), "Florida 2":(161,500), "Florida 3":(161,500), "Georgia 1":(161,500), "Georgia 2":(161,500), "Louisiana":(161,500), "Manitoba":(161,500), "Maryland":(161,500), "Minnesota 2":(161,500), "Mississippi":(161,500), "North Carolina 1":(161,500), "North Carolina 2":(161,500), "Ontario 1":(161,500), "Ontario 2":(161,500), "Ontario 3":(161,500), "Ontario 4":(161,500), "Pennsylvania 2":(161,500), "Pennsylvania 3":(161,500), "South Carolina":(161,500), "Tennessee 1":(161,500), "Tennessee 2":(161,500), "Virginia 1":(161,500), "Virginia 2":(161,500), "Connecticut":(138,345), "Delaware":(138,345), "Illinois 1":(138,345), "Illinois 2":(138,345), "Iowa":(138,345), "Kansas":(138,345), "Kentucky":(138,345), "Maine":(138,345), "Massachusetts":(138,345), "Michigan 1":(138,345), "Michigan 2":(138,345), "Minnesota 1":(138,345), "Missouri 1":(138,345), "Missouri 2":(138,345), "Nebraska":(138,345), "New Brunswick":(138,345), "New Hampshire":(138,345), "New Jersey 2":(138,345), "New Mexico and Texas Panhandle":(138,345), "New York 1":(138,345), "New York 2":(138,345), "New York 3":(138,345), "New York 4":(138,345), "New York 5":(138,345), "North Dakota":(138,345), "Nova Scotia":(138,345), "Ohio 2":(138,345), "Oklahoma":(138,345), "Pennsylvania 1":(138,345), "Prince Edward Island":(138,345), "Rhode Island":(138,345), "South Dakota":(138,345), "Vermont":(138,345), "Wisconsin":(138,345), "Saskatchewan":(138,345)}
     area_regions = {"Florida 1":"FLORIDA", "Florida 2":"FLORIDA", "Florida 3":"FLORIDA", "Connecticut":"NEWENG", "Maine":"NEWENG", "Massachusetts":"NEWENG", "New Hampshire":"NEWENG", "Rhode Island":"NEWENG", "Vermont":"NEWENG", "New Brunswick":"MARITIME", "Nova Scotia":"MARITIME", "Prince Edward Island":"MARITIME", "Manitoba":"CENTCAN", "Arkansas":"MIDWEST", "Far East Texas":"MIDWEST", "Illinois 1":"MIDWEST", "Iowa":"MIDWEST", "Louisiana":"MIDWEST", "Michigan 1":"MIDWEST", "Michigan 2":"MIDWEST", "Minnesota 1":"MIDWEST", "Minnesota 2":"MIDWEST", "Wisconsin":"MIDWEST", "New York 1":"NEWYORK", "New York 2":"NEWYORK", "New York 3":"NEWYORK", "New York 4":"NEWYORK", "New York 5":"NEWYORK", "Ontario 1":"ONTARIO", "Ontario 2":"ONTARIO", "Ontario 3":"ONTARIO", "Ontario 4":"ONTARIO", "Delaware":"MIDATL", "Illinois 2":"MIDATL", "Indiana":"MIDATL", "Kentucky":"MIDATL", "Maryland":"MIDATL", "New Jersey 1":"MIDATL", "New Jersey 2":"MIDATL", "Ohio 1":"MIDATL", "Ohio 2":"MIDATL", "Pennsylvania 1":"MIDATL", "Pennsylvania 2":"MIDATL", "Pennsylvania 3":"MIDATL", "Virginia 1":"MIDATL", "Virginia 2":"MIDATL", "West Virginia":"MIDATL", "Saskatchewan":"CENTCAN", "Missouri 1":"SEAST", "Missouri 2":"SEAST", "Tennessee 1":"SEAST", "Tennessee 2":"SEAST", "North Carolina 1":"SEAST", "North Carolina 2":"SEAST", "South Carolina":"SEAST", "Alabama 1":"SEAST", "Alabama 2":"SEAST", "Georgia 1":"SEAST", "Georgia 2":"SEAST", "Mississippi":"SEAST", "Kansas":"PLAINS", "Nebraska":"PLAINS", "New Mexico and Texas Panhandle":"PLAINS", "North Dakota":"PLAINS", "Oklahoma":"PLAINS", "South Dakota":"PLAINS" } 
     region_load_factor = {"FLORIDA": 2.47, "NEWENG": 1.63, "MARITIME": 2.7, "CENTCAN": 3.68, "MIDWEST": 3.31, "NEWYORK": 1.59, "ONTARIO": 1.74, "MIDATL": 2.04, "SEAST": 2.8, "PLAINS": 4.98}
@@ -380,5 +383,15 @@ def do_sub_planning_70k():
                 "import_from_aux": "string"}
     sgb.wb.pw_instructions["gen.eia860_generator"] = {"pwfield":["CustomString:1"],
                 "import_from_aux": "string"}
+
+    # TODO: Sprinkle large loads into the substations - Brian?
+    # TODO: Do we add large loads to existing substations or create new ones - check with Dr. B?
+
+    # TODO: #1 - Update inputs to latest possible data (after clarfying ques on loads and gen)
+    # TODO: #2 - Figure out how to split areas and zones - then assign them in code
+    # TODO: #3 - Determine clustering for substations
+    # TODO: #4 - Determine EHV substations and clustering for those
+    # TODO: #5 - Run the substation code as is
+    # TODO: #6 - Add large loads
     
-    sgb.export_aux("Eastern70k_Subs.aux")
+    sgb.export_aux("ERCOT_Subs.aux")
