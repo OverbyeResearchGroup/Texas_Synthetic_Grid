@@ -1,6 +1,6 @@
 # Created 9/4/23 by Adam Birchfield for building the new ei70k case
 # Copied 5/27/24 by Adam Birchfield for building new ei70k case
-# 06/01/2024 ABB Cleanup
+# Edited 2/26/2026 by Sanjana K for building new Texas case
 
 import os
 from time import time
@@ -22,10 +22,11 @@ def lap(txt): global tlap; print(txt + f" | {time()-tlap} secs"); tlap=time()
 
 def do_sub_planning_70k():
 
-    sgb = SyntheticGridBuilder("ei70k_config.txt")
+    sgb = SyntheticGridBuilder("texas_config.txt")
 
 
     # Read CSV Files
+    #TODO: Change these to ERCOT inputs
     census2020_geo = sgb.read_csv(rf"{sgb.input_folder}\2022_Gaz_tracts_national\2022_Gaz_tracts_national.csv")
     census2020_pop = sgb.read_csv(rf"{sgb.input_folder}\DECENNIALDP2020.DP1_2023-08-29T115315\DECENNIALDP2020.DP1-Data-clean.csv")
     eia860_2022_plants = sgb.read_csv(rf"{sgb.input_folder}\eia8602022ER\2___Plant_Y2022_Early_Release.csv")
@@ -33,8 +34,6 @@ def do_sub_planning_70k():
     eia860_2022_gens_planned = sgb.read_csv(rf"{sgb.input_folder}\eia8602022ER\3_1_Generator_Y2022_Early_Release-Planned.csv")
     #city_centers = sgb.read_csv(rf"{sgb.input_folder}\cities.csv")
     #mountain_bounds = sgb.read_csv(rf"{sgb.input_folder}\mountains.csv")
-    canada_loads = sgb.read_csv(rf"{sgb.input_folder}\CanadaLoads2.csv")
-    canada_gens = sgb.read_csv(rf"{sgb.input_folder}\CanadaGenerators.csv")
 
     # Read ShapeFiles
     db_lake_bounds = gpd.read_file(rf"{sgb.input_folder}\GL230521_lam\GL230521_lam.shp")
@@ -46,26 +45,6 @@ def do_sub_planning_70k():
     coasts = []
     for i in range(db_coasts.shape[0]):
         coasts.append(db_coasts.iloc[i]["geometry"])
-    db_provinces = gpd.read_file(rf"{sgb.input_folder}\lpr_000a21a_e\lpr_000a21a_e.shp")
-    db_provinces.to_crs('epsg:4326', inplace=True)
-    province_bounds = {}
-    for i in range(db_provinces.shape[0]):
-        geo = db_provinces.iloc[i]["geometry"]
-        if geo.geom_type == "Polygon":
-            coords = list(geo.exterior.coords)
-        else:
-            coords = []
-            for geo2 in list(geo.geoms):
-                coords.extend(list(geo2.exterior.coords))
-        coords2 = []
-        last_c = (0,0)
-        for c in coords:
-            dist = (last_c[0]-c[0])**2 + (last_c[1]-c[1])**2
-            if dist < .02 or c[1] > 55: continue
-            coords2.append(c)
-            last_c = c
-        coords2.append(coords[0])
-        province_bounds[db_provinces.iloc[i]["PRENAME"]] = coords2
 
     # Read KML File
     ei_boundary = []
@@ -81,6 +60,7 @@ def do_sub_planning_70k():
 
     lap("Files loaded in")
 
+    # TODO: Change these to weather zones or load zones - check with Dr. B
     state_map = {"AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas", 
                 "CA": "California", "CO": "Colorado", "CT": "Connecticut", 
                 "DE": "Delaware", "DC": "District of Columbia", "FL": "Florida", 
@@ -135,48 +115,6 @@ def do_sub_planning_70k():
 
     lap(f"Created {len(sgb.load_frags)} USA load fragments")
 
-    for canload in canada_loads:
-        lf = LoadFragment()
-        lf.lat = float(canload['Latitude'])
-        lf.lon = float(canload['Longitude'])
-
-        # Filter by EI boundary
-        nright = 0
-        for i in range(len(ei_boundary)-1):
-            x1, y1 = ei_boundary[i]
-            x2, y2 = ei_boundary[i+1]
-            if lf.lat < min(y1, y2) or lf.lat > max(y1, y2) or lf.lon > max(x1, x2) \
-                    or y1 == y2: continue
-            lon2 = (lf.lat - y1) * (x2 - x1) / (y2 - y1) + x1
-            if lon2 < lf.lon: continue
-            nright += 1
-        if nright % 2 == 0:
-            continue
-
-        # Get province using point in polygon method
-        lf.area = "Canada"
-        for pv_name, coords in province_bounds.items():
-            nright = 0
-            for i in range(len(coords)-1):
-                x1, y1 = coords[i]
-                x2, y2 = coords[i+1]
-                if lf.lat < min(y1, y2) or lf.lat > max(y1, y2) or lf.lon > max(x1, x2) \
-                        or y1 == y2: continue
-                lon2 = (lf.lat - y1) * (x2 - x1) / (y2 - y1) + x1
-                if lon2 < lf.lon: continue
-                nright += 1
-            if nright % 2 == 0:
-                continue
-            else:
-                lf.area = pv_name
-                break
-
-        lf.p = float(canload['Population']) * 0.0021
-        lf.name = canload["City"]
-        sgb.load_frags.append(lf)
-
-    lap(f"Created {len(sgb.load_frags)} Canada load fragments")
-
     # Perhaps for larger ones, split into smaller fragments inside coastline bounds
 
     # Create generator fragments from input data
@@ -230,57 +168,6 @@ def do_sub_planning_70k():
 
     lap(f"Created {len(sgb.gen_frags)} USA gen fragments")
 
-    for gen in canada_gens:
-        pmax = float(gen["TotalCapMW"])
-        if pmax < 5: continue
-        gf = GenFragment(
-            name=gen["Name"],
-            lat=float(gen["Latitude"]),
-            lon=float(gen["Longitude"]),
-            plant_code = "Canada",
-            units = []
-        )
-        nu = int(gen["NumUnits"])
-        for i in range(nu):
-            gu = GenUnit(fueltype=gen["Technology"], pmax=round(pmax/nu,2),
-                pmin=round(pmax/nu*.1,2), unit_id = "Canada")
-            gf.units.append(gu)
-        
-        # Filter by EI boundary
-        nright = 0
-        for i in range(len(ei_boundary)-1):
-            x1, y1 = ei_boundary[i]
-            x2, y2 = ei_boundary[i+1]
-            if gf.lat < min(y1, y2) or gf.lat > max(y1, y2) or gf.lon > max(x1, x2) \
-                    or y1 == y2: continue
-            lon2 = (gf.lat - y1) * (x2 - x1) / (y2 - y1) + x1
-            if lon2 < gf.lon: continue
-            nright += 1
-        if nright % 2 == 0:
-            continue
-
-        # Get province
-        gf.area = "Canada"
-        for pv_name, coords in province_bounds.items():
-            nright = 0
-            for i in range(len(coords)-1):
-                x1, y1 = coords[i]
-                x2, y2 = coords[i+1]
-                if gf.lat < min(y1, y2) or gf.lat > max(y1, y2) \
-                        or gf.lon > max(x1, x2) or y1 == y2: continue
-                lon2 = (gf.lat - y1) * (x2 - x1) / (y2 - y1) + x1
-                if lon2 < gf.lon: continue
-                nright += 1
-            if nright % 2 == 0:
-                continue
-            else:
-                gf.area = pv_name
-                break
-
-        sgb.gen_frags.append(gf)
-
-    lap(f"Created {len(sgb.gen_frags)} Canada gen fragments")
-
     print(f"Total gen units {sum(len(g.units) for g in sgb.gen_frags)}")
     gen_cap_total = sum(sum(gu.pmax for gu in g.units) for g in sgb.gen_frags)
     print(f"Total gen capacity {gen_cap_total}")
@@ -294,6 +181,7 @@ def do_sub_planning_70k():
     sgb.assign_gen_cost()
 
     # Correct areas from just the states
+    #TODO: Change these to Texas areas
     area_split = {
         "Ontario": ["Lat", 44.2],
         "New York": ["Lat", 41.3, 43.5],
@@ -366,7 +254,7 @@ def do_sub_planning_70k():
     sgb.create_areas()
 
     # Clustering into substations
-    sgb.cluster_load_frags(18000)
+    sgb.cluster_load_frags(18000) #TODO: what should the cluster load frags number be? - check with Dr. B
     sgb.create_subs_old()
 
     # Post-processing
@@ -379,7 +267,7 @@ def do_sub_planning_70k():
     subs = sgb.wb.subs
     sub_coords = [(s.longitude, s.latitude) for s in subs]
 
-    nc = 400
+    nc = 400 #TODO: what should the nc number be? - check with Dr. B
 
     class EHV_Cluster:
         def __init__(self):
@@ -415,6 +303,7 @@ def do_sub_planning_70k():
             s.is_ehv = True
 
     # Specific area specifications - kv levels, regions, region load factor
+    # TODO: Update based on Texas areas - check with Dr. B
     kv_areas = {"Indiana":(138,765), "Ohio 1":(138,765), "West Virginia":(138,765), "New Jersey 1":(161,500), "Alabama 1":(161,500), "Alabama 2":(161,500), "Arkansas":(161,500), "Far East Texas":(161,500), "Florida 1":(161,500), "Florida 2":(161,500), "Florida 3":(161,500), "Georgia 1":(161,500), "Georgia 2":(161,500), "Louisiana":(161,500), "Manitoba":(161,500), "Maryland":(161,500), "Minnesota 2":(161,500), "Mississippi":(161,500), "North Carolina 1":(161,500), "North Carolina 2":(161,500), "Ontario 1":(161,500), "Ontario 2":(161,500), "Ontario 3":(161,500), "Ontario 4":(161,500), "Pennsylvania 2":(161,500), "Pennsylvania 3":(161,500), "South Carolina":(161,500), "Tennessee 1":(161,500), "Tennessee 2":(161,500), "Virginia 1":(161,500), "Virginia 2":(161,500), "Connecticut":(138,345), "Delaware":(138,345), "Illinois 1":(138,345), "Illinois 2":(138,345), "Iowa":(138,345), "Kansas":(138,345), "Kentucky":(138,345), "Maine":(138,345), "Massachusetts":(138,345), "Michigan 1":(138,345), "Michigan 2":(138,345), "Minnesota 1":(138,345), "Missouri 1":(138,345), "Missouri 2":(138,345), "Nebraska":(138,345), "New Brunswick":(138,345), "New Hampshire":(138,345), "New Jersey 2":(138,345), "New Mexico and Texas Panhandle":(138,345), "New York 1":(138,345), "New York 2":(138,345), "New York 3":(138,345), "New York 4":(138,345), "New York 5":(138,345), "North Dakota":(138,345), "Nova Scotia":(138,345), "Ohio 2":(138,345), "Oklahoma":(138,345), "Pennsylvania 1":(138,345), "Prince Edward Island":(138,345), "Rhode Island":(138,345), "South Dakota":(138,345), "Vermont":(138,345), "Wisconsin":(138,345), "Saskatchewan":(138,345)}
     area_regions = {"Florida 1":"FLORIDA", "Florida 2":"FLORIDA", "Florida 3":"FLORIDA", "Connecticut":"NEWENG", "Maine":"NEWENG", "Massachusetts":"NEWENG", "New Hampshire":"NEWENG", "Rhode Island":"NEWENG", "Vermont":"NEWENG", "New Brunswick":"MARITIME", "Nova Scotia":"MARITIME", "Prince Edward Island":"MARITIME", "Manitoba":"CENTCAN", "Arkansas":"MIDWEST", "Far East Texas":"MIDWEST", "Illinois 1":"MIDWEST", "Iowa":"MIDWEST", "Louisiana":"MIDWEST", "Michigan 1":"MIDWEST", "Michigan 2":"MIDWEST", "Minnesota 1":"MIDWEST", "Minnesota 2":"MIDWEST", "Wisconsin":"MIDWEST", "New York 1":"NEWYORK", "New York 2":"NEWYORK", "New York 3":"NEWYORK", "New York 4":"NEWYORK", "New York 5":"NEWYORK", "Ontario 1":"ONTARIO", "Ontario 2":"ONTARIO", "Ontario 3":"ONTARIO", "Ontario 4":"ONTARIO", "Delaware":"MIDATL", "Illinois 2":"MIDATL", "Indiana":"MIDATL", "Kentucky":"MIDATL", "Maryland":"MIDATL", "New Jersey 1":"MIDATL", "New Jersey 2":"MIDATL", "Ohio 1":"MIDATL", "Ohio 2":"MIDATL", "Pennsylvania 1":"MIDATL", "Pennsylvania 2":"MIDATL", "Pennsylvania 3":"MIDATL", "Virginia 1":"MIDATL", "Virginia 2":"MIDATL", "West Virginia":"MIDATL", "Saskatchewan":"CENTCAN", "Missouri 1":"SEAST", "Missouri 2":"SEAST", "Tennessee 1":"SEAST", "Tennessee 2":"SEAST", "North Carolina 1":"SEAST", "North Carolina 2":"SEAST", "South Carolina":"SEAST", "Alabama 1":"SEAST", "Alabama 2":"SEAST", "Georgia 1":"SEAST", "Georgia 2":"SEAST", "Mississippi":"SEAST", "Kansas":"PLAINS", "Nebraska":"PLAINS", "New Mexico and Texas Panhandle":"PLAINS", "North Dakota":"PLAINS", "Oklahoma":"PLAINS", "South Dakota":"PLAINS" } 
     region_load_factor = {"FLORIDA": 2.47, "NEWENG": 1.63, "MARITIME": 2.7, "CENTCAN": 3.68, "MIDWEST": 3.31, "NEWYORK": 1.59, "ONTARIO": 1.74, "MIDATL": 2.04, "SEAST": 2.8, "PLAINS": 4.98}
