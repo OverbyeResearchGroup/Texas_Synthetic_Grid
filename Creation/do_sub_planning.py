@@ -26,15 +26,14 @@ def do_sub_planning():
 
 
     # Read CSV Files
-    #TODO: Change these to ERCOT inputs
     census2020_geo = sgb.read_csv(rf"{sgb.input_folder}\2022_Gaz_tracts_national\2022_Gaz_tracts_national.csv")
     census2020_pop = sgb.read_csv(rf"{sgb.input_folder}\DECENNIALDP2020.DP1_2023-08-29T115315\DECENNIALDP2020.DP1-Data-clean.csv")
-    eia860_2022_plants = sgb.read_csv(rf"{sgb.input_folder}\eia8602022ER\2___Plant_Y2022_Early_Release.csv")
-    eia860_2022_gens_operable = sgb.read_csv(rf"{sgb.input_folder}\eia8602022ER\3_1_Generator_Y2022_Early_Release-Operable.csv")
-    eia860_2022_gens_planned = sgb.read_csv(rf"{sgb.input_folder}\eia8602022ER\3_1_Generator_Y2022_Early_Release-Planned.csv")
-    #city_centers = sgb.read_csv(rf"{sgb.input_folder}\cities.csv")
-    #mountain_bounds = sgb.read_csv(rf"{sgb.input_folder}\mountains.csv")
+    eia860_2022_plants = sgb.read_csv(rf"{sgb.input_folder}\eia8602024ER\2___Plant_Y2024.csv") #updated to 2024 EIA
+    eia860_2022_gens_operable = sgb.read_csv(rf"{sgb.input_folder}\eia8602024ER\3_1_Generator_Y2022_Early_Release-Operable.csv")
+    eia860_2022_gens_planned = sgb.read_csv(rf"{sgb.input_folder}\eia8602024ER\3_1_Generator_Y2022_Early_Release-Planned.csv")
+    # TODO: Modify this to ERCOT GIS planned
 
+    # TODO: add condition to only pick additional generators from GIS planned to meet 145GW
     # Read ShapeFiles
     db_lake_bounds = gpd.read_file(rf"{sgb.input_folder}\GL230521_lam\GL230521_lam.shp")
     db_lake_bounds.to_crs('epsg:4326', inplace=True)
@@ -387,7 +386,7 @@ def do_sub_planning():
     # TODO: Sprinkle large loads into the substations - Brian?
     # TODO: Do we add large loads to existing substations or create new ones - check with Dr. B?
 
-    # TODO: #1 - Update inputs to latest possible data (after clarfying ques on loads and gen)
+    # TODO: #1 - Update inputs to latest possible data (after clarifying ques on loads and gen)
     # TODO: #2 - Figure out how to split areas and zones - then assign them in code
     # TODO: #3 - Determine clustering for substations
     # TODO: #4 - Determine EHV substations and clustering for those
