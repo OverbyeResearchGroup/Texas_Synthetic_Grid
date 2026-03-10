@@ -217,3 +217,15 @@ venv/
 
 
 
+
+# ERCOT Synthetic Grid — generated outputs and large data files
+Output/
+Inputs/
+*.aux
+*.pwb
+*.pwb_B
+*.raw
+*.csv
+*.xlsx
+*.xls
+log.txt
