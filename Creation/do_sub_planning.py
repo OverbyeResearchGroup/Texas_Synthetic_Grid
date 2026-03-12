@@ -1,8 +1,13 @@
 # Created 9/4/23 by Adam Birchfield for building the new ei70k case
 # Copied 5/27/24 by Adam Birchfield for building new ei70k case
 # Edited 2/26/2026 by Sanjana K for building new Texas case
-
+import sys
 import os
+sys.path.append(os.path.join(os.getcwd(), 'helper'))
+
+import geopandas as gpd
+from shapely.geometry import shape
+
 from time import time
 from numpy.random import random
 
@@ -16,6 +21,7 @@ from sgb_suite.syntheticgridbuilder import SyntheticGridBuilder
 from sgb_suite.sub_planning import LoadFragment
 from sgb_suite.sub_planning import GenFragment, GenUnit
 
+from read_weather_zones import lat_lon_to_zone
 
 tlap = time()
 def lap(txt): global tlap; print(txt + f" | {time()-tlap} secs"); tlap=time()
@@ -26,14 +32,17 @@ def do_sub_planning():
 
 
     # Read CSV Files
-    #TODO: Change these to ERCOT inputs
     census2020_geo = sgb.read_csv(rf"{sgb.input_folder}\2022_Gaz_tracts_national\2022_Gaz_tracts_national.csv")
     census2020_pop = sgb.read_csv(rf"{sgb.input_folder}\DECENNIALDP2020.DP1_2023-08-29T115315\DECENNIALDP2020.DP1-Data-clean.csv")
-    eia860_2022_plants = sgb.read_csv(rf"{sgb.input_folder}\eia8602022ER\2___Plant_Y2022_Early_Release.csv")
-    eia860_2022_gens_operable = sgb.read_csv(rf"{sgb.input_folder}\eia8602022ER\3_1_Generator_Y2022_Early_Release-Operable.csv")
-    eia860_2022_gens_planned = sgb.read_csv(rf"{sgb.input_folder}\eia8602022ER\3_1_Generator_Y2022_Early_Release-Planned.csv")
-    #city_centers = sgb.read_csv(rf"{sgb.input_folder}\cities.csv")
-    #mountain_bounds = sgb.read_csv(rf"{sgb.input_folder}\mountains.csv")
+    eia860_2024_plants = sgb.read_csv(rf"{sgb.input_folder}\eia8602024ER\2___Plant_Y2024.csv") #updated to 2024 EIA
+    eia860_2024_gens_operable = sgb.read_csv(rf"{sgb.input_folder}\eia8602024ER\3_1_Generator_Y2024-Operable.csv")
+    eia860_2024_gens_planned = sgb.read_csv(rf"{sgb.input_folder}\eia8602024ER\3_1_Generator_Y2024-Planned.csv")
+
+    # Read GIS data -not used yet
+    # GIS_2025_gens = sgb.read_csv(rf"{sgb.input_folder}\GIS_generators_2026_January.csv")
+    # GIS_2025_plants = sgb.read_csv(rf"{sgb.input_folder}\GIS_Plant_madeup_updated.csv")
+
+    print("Read CSV files")
 
     # Read ShapeFiles
     db_lake_bounds = gpd.read_file(rf"{sgb.input_folder}\GL230521_lam\GL230521_lam.shp")
@@ -46,47 +55,30 @@ def do_sub_planning():
     for i in range(db_coasts.shape[0]):
         coasts.append(db_coasts.iloc[i]["geometry"])
 
-    # Read KML File
-    ei_boundary = [] #TODO: Get shapefiile from Brian and add it here- change EI to ERCOT
-    with open(rf"{sgb.input_folder}\EI_Boundary.kml") as f:
-        while f.readline().strip() != "<coordinates>": continue
-        while True:
-            line = f.readline().strip()
-            if line == "</coordinates>": break
-            lineparts = line.split()
-            for part in lineparts:
-                coords = [float(x) for x in part.split(',')[:2]]
-                ei_boundary.append(coords)
+    print("Read Shape files")
 
+    # Read KML File
+    ercot_service_area = []
+
+    # Read KML properly
+    gdf = gpd.read_file(rf"{sgb.input_folder}\ercot_service_area.kml")
+    # Get the coordinates from the polygon
+    polygon = gdf.geometry.iloc[0]
+    # Or if you want [lon, lat] without the last coordinate (which repeats first)
+    ercot_service_area = [[x, y] for x, y in polygon.exterior.coords[:-1]]
+
+    print("Read KML files")
     lap("Files loaded in")
 
-    # TODO: Change these to weather zones or load zones - check with Dr. B - weather zone may be better!
-    state_map = {"AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas", 
-                "CA": "California", "CO": "Colorado", "CT": "Connecticut", 
-                "DE": "Delaware", "DC": "District of Columbia", "FL": "Florida", 
-                "GA": "Georgia", "HI": "Hawaii", "ID": "Idaho", "IL": "Illinois", 
-                "IN": "Indiana", "IA": "Iowa", "KS": "Kansas", "KY": "Kentucky", 
-                "LA": "Louisiana", "ME": "Maine", "MD": "Maryland", 
-                "MA": "Massachusetts", "MI": "Michigan", "MN": "Minnesota", 
-                "MS": "Mississippi", "MO": "Missouri", "MT": "Montana",
-                "NE": "Nebraska", "NV": "Nevada", "NH": "New Hampshire", 
-                "NJ": "New Jersey", "NM": "New Mexico", "NY": "New York", 
-                "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio", 
-                "OK": "Oklahoma", "OR": "Oregon", "PA": "Pennsylvania", 
-                "PR": "Puerto Rico", "RI": "Rhode Island", "SC": "South Carolina", 
-                "SD": "South Dakota", "TN": "Tennessee", "TX": "Texas", "UT": "Utah", 
-                "VT": "Vermont", "VA": "Virginia", "VI": "Virgin Islands", 
-                "WA": "Washington", "WV": "West Virginia", "WI": "Wisconsin", 
-                "WY": "Wyoming", "AB": "Alberta", "BC": "British Columbia",
-                "SK": "Saskatchewan", "MB": "Manitoba", "ON": "Ontario",
-                "QC": "Quebec", "NB": "New Brunswick", "NL": "Newfoundland",
-                "NS": "Nova Scotia", "PE": "Prince Edward Island"}
+    # These stay the same because they are used to extract from EIA data: converting AL to Alabama, etc.
+    state_map = {"TX": "Texas"}
 
     # Create load fragments from input data
     sgb.load_frags = []
     #name_dict = {}
     for geo, pop in zip(census2020_geo, census2020_pop):
         #if len(sgb.load_frags) > 100: continue
+        if geo["USPS"] != 'TX': continue
         lf = LoadFragment()
         lf.lat = float(geo['INTPTLAT'])
         lf.lon = float(geo['INTPTLONG'])
@@ -94,9 +86,9 @@ def do_sub_planning():
 
         # Filter by EI boundary
         nright = 0
-        for i in range(len(ei_boundary)-1):
-            x1, y1 = ei_boundary[i]
-            x2, y2 = ei_boundary[i+1]
+        for i in range(len(ercot_service_area)-1):
+            x1, y1 = ercot_service_area[i]
+            x2, y2 = ercot_service_area[i+1]
             if lf.lat < min(y1, y2) or lf.lat > max(y1, y2) or lf.lon > max(x1, x2) \
                     or y1 == y2: continue
             lon2 = (lf.lat - y1) * (x2 - x1) / (y2 - y1) + x1
@@ -119,8 +111,10 @@ def do_sub_planning():
 
     # Create generator fragments from input data
     plant_map = {}
-    for plant in eia860_2022_plants:
+
+    for plant in eia860_2024_plants:# + GIS_2025_plants:
         if plant["Latitude"] == "": continue
+        if plant["State"] != "TX": continue
         gf = GenFragment(name=plant["Plant Name"],
             lat=float(plant["Latitude"]),
             lon=float(plant["Longitude"]),
@@ -131,9 +125,9 @@ def do_sub_planning():
         
         # Filter by EI boundary
         nright = 0
-        for i in range(len(ei_boundary)-1):
-            x1, y1 = ei_boundary[i]
-            x2, y2 = ei_boundary[i+1]
+        for i in range(len(ercot_service_area)-1):
+            x1, y1 = ercot_service_area[i]
+            x2, y2 = ercot_service_area[i+1]
             if gf.lat < min(y1, y2) or gf.lat > max(y1, y2) or gf.lon > max(x1, x2) \
                     or y1 == y2: continue
             lon2 = (gf.lat - y1) * (x2 - x1) / (y2 - y1) + x1
@@ -144,20 +138,23 @@ def do_sub_planning():
 
         plant_map[plant["Plant Code"]] = gf
 
-    for gen in eia860_2022_gens_operable + eia860_2022_gens_planned:
+    for gen in eia860_2024_gens_operable + eia860_2024_gens_planned: # + GIS_2025_gens:
         if gen["Plant Code"] not in plant_map: continue
         gf = plant_map[gen["Plant Code"]]
         tech = gen["Technology"]
-        pmax = float(gen["Summer Capacity (MW)"].strip('"')) \
-            if len(gen["Summer Capacity (MW)"]) != 0 \
-                else float(gen["Nameplate Capacity (MW)"].strip('"'))
+
+        def safe_cap(val):
+            v = str(val).strip().strip('"')
+            return float(v) if v and v not in ['', 'nan', 'None'] else None
+
+        pmax = safe_cap(gen["Summer Capacity (MW)"]) or safe_cap(gen["Nameplate Capacity (MW)"])
         has_pmin = "Minimum Load (MW)" in gen and len(gen["Minimum Load (MW)"]) > 0
         pmin = float(gen["Minimum Load (MW)"].strip('"')) if has_pmin else 0
         if "Current Year" in gen:
-            if float(gen["Current Year"].strip('"')) >= 2024: continue
+            if float(gen["Current Year"].strip('"')) >= 2031: continue
         else:
-            if gen["Planned Retirement Year"] != "" and \
-                    float(gen["Planned Retirement Year"].strip('"')) < 2024:
+            if gen["Planned Retirement Year"] and gen["Planned Retirement Year"] != "X" and \
+                    float(gen["Planned Retirement Year"]) < 2031:
                 continue
         genunit = GenUnit(fueltype=tech, pmax=pmax, pmin=pmin, 
             unit_id = gen["Generator ID"])
@@ -180,83 +177,15 @@ def do_sub_planning():
     sgb.assign_gen_qlims()
     sgb.assign_gen_cost()
 
-    # Correct areas from just the states
-    #TODO: Change these to Texas areas?? -do we need to break weather zones into smaller? - county? group them?
-    area_split = {
-        "Ontario": ["Lat", 44.2],
-        "New York": ["Lat", 41.3, 43.5],
-        "New Jersey": ["Lat", 40.15],
-        "Pennsylvania": ["Lon", -79.2, -76],
-        "Virginia": ["Lon", -78],
-        "North Carolina": ["Lon", -80],
-        "Georgia": ["Lat", 33.2],
-        "Florida": ["Lat", 27, 29.55],
-        "Alabama": ["Lat", 32.7],
-        "Tennessee": ["Lon", -85.9],
-        "Ohio": ["Lat", 40.4],
-        "Michigan": ["Lat", 43.4],
-        "Illinois": ["Lat", 41.2],
-        "Minnesota": ["Lat", 45.3],
-        "Missouri": ["Lon", -92.4]
-    }
+
     for frag in sgb.gen_frags + sgb.load_frags:
         if frag.area == "Texas":
-            if frag.lon < -98:
-                frag.area = "New Mexico and Texas Panhandle"
-            else:
-                frag.area = "Far East Texas"
-        if frag.area == "New Mexico":
-            frag.area = "New Mexico and Texas Panhandle"
-        if frag.area == "District of Columbia":
-            frag.area = "Maryland"
-        if frag.area == "Quebec":
-            if frag.lon < -72:
-                frag.area = "Ontario"
-            else:
-                frag.area = "New Brunswick"
-        if frag.area == "Canada":
-            if frag.lon < -95.1:
-                frag.area = "Manitoba"
-            elif frag.lon < -72:
-                frag.area = "Ontario"
-            else:
-                frag.area = "New Brunswick"
-        if frag.area == "Montana":
-            frag.area = "North Dakota"
-        if frag.area == "Alberta":
-            frag.area = "Saskatchewan"
-        if frag.area == "Newfoundland and Labrador":
-            if frag.lon < -102:
-                frag.area = "Saskatchewan"
-            else:
-                frag.area = "Manitoba"
-        if frag.area in area_split:
-            instr = area_split[frag.area]
-            for i in range(1, len(instr)):
-                if instr[0] == "Lat":
-                    if frag.lat < instr[i]:
-                        frag.area += f" {i}"
-                        break
-                else:
-                    if frag.lon < instr[i]:
-                        frag.area += f" {i}"
-                        break
-            else:
-                frag.area += f" {len(instr)}"
-        if frag.area == "Ontario 1":
-            if frag.lon < -80: frag.area = "Ontario 3"
-        if frag.area == "Ontario 2":
-            if frag.lon < -77.85: frag.area = "Ontario 4"
-        if frag.area == "New York 2":
-            if frag.lon < -76.43: frag.area = "New York 4"
-            elif frag.lon < -74.71: frag.area = "New York 5"
-
+            frag.area = lat_lon_to_zone(frag.lat, frag.lon)
+        
     sgb.create_areas()
 
     # Clustering into substations
-    sgb.cluster_load_frags(18000) #TODO: what should the cluster load frags number be? - check with Dr. B
-    #TODO: 50% of the bus suzes? stick to the 2.3 or 2.5 buses per substation - check with Dr. B?
-    # do statistics with ERCOT?
+    sgb.cluster_load_frags(6000) #TODO: what should the cluster load frags number be? - check with Dr. B
     sgb.create_subs_old()
 
     # Post-processing
@@ -271,7 +200,7 @@ def do_sub_planning():
 
     nc = 400 #TODO: what should the nc number be? - check with Dr. B
 
-    class EHV_Cluster: #TODO: Would we add 765 here or just upto 345? - check with Dr. B
+    class EHV_Cluster:
         def __init__(self):
             self.subs = []
 
@@ -388,7 +317,7 @@ def do_sub_planning():
     # TODO: Sprinkle large loads into the substations - Brian?
     # TODO: Do we add large loads to existing substations or create new ones - check with Dr. B?
 
-    # TODO: #1 - Update inputs to latest possible data (after clarfying ques on loads and gen)
+    # TODO: #1 - Update inputs to latest possible data (after clarifying ques on loads and gen)
     # TODO: #2 - Figure out how to split areas and zones - then assign them in code
     # TODO: #3 - Determine clustering for substations
     # TODO: #4 - Determine EHV substations and clustering for those

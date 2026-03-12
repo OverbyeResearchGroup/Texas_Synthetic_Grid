@@ -1,7 +1,7 @@
 key,value
-root,D:\Github\Swedish_Grid_Builder
-output_code,2024_Jun01
-time_out_minutes,2880
+root,D:\Github\Texas_Synthetic_Grid\Creation
+output_code,2026_Mar11
+time_out_minutes,1440
 cost_fixed_mi,1
 miles_above_norm_mult,10
 const_fixed_cost,20
