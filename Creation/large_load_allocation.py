@@ -608,7 +608,8 @@ def plot_spatial_validation(ref_loads_df, synthetic_gdf, boundary_polygon=None,
 
 def run_large_load_allocation(saw, weather_zone_gdf, boundary_polygon,
                                fit_thomas=True, sigma_fallback_km=50.0,
-                               zone_col='ERCOT_Clim', seed=42):
+                               zone_col='ERCOT_Clim', seed=42,
+                               n_loads=None):
     """
     Full pipeline: extract -> area stats -> (fit Thomas) -> generate -> assign MW.
 
@@ -629,6 +630,9 @@ def run_large_load_allocation(saw, weather_zone_gdf, boundary_polygon,
         Column name for weather zone identifier.
     seed : int
         Random seed for reproducibility.
+    n_loads : int, optional
+        Target number of synthetic large loads. If None, uses reference count.
+        The per-zone proportions from the reference case are preserved.
 
     Returns
     -------
@@ -655,12 +659,24 @@ def run_large_load_allocation(saw, weather_zone_gdf, boundary_polygon,
         sigma_fallback_m = sigma_fallback_km * 1000.0
         print(f"Thomas fitting skipped — using sigma_fallback = {sigma_fallback_km} km")
 
-    # Step 4: Generate synthetic locations
+    # Step 4: Scale per-zone counts if n_loads is specified
+    if n_loads is not None:
+        ref_total = area_stats_df['NumLoads'].sum()
+        scale_factor = n_loads / ref_total
+        # Scale each zone proportionally, ensure at least 1 load per zone
+        area_stats_df = area_stats_df.copy()
+        area_stats_df['NumLoads'] = np.maximum(
+            1, np.round(area_stats_df['NumLoads'] * scale_factor).astype(int)
+        )
+        print(f"Scaled load count: {ref_total} -> {area_stats_df['NumLoads'].sum()} "
+              f"(target: {n_loads}, factor: {scale_factor:.2f})")
+
+    # Step 5: Generate synthetic locations
     synthetic_locs = generate_area_aware_loads(
         area_stats_df, sigma_fallback_m, boundary_polygon, rng
     )
 
-    # Step 5: Assign MW
+    # Step 6: Assign MW (benchmark sizes, no scaling)
     synthetic_assigned = assign_load_mw(
         synthetic_locs, ref_loads_gdf, weather_zone_gdf, zone_col, rng=rng
     )
